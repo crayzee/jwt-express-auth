@@ -1,66 +1,58 @@
 const express = require('express');
-const mongoose = require('mongoose');
-const session = require('express-session');
-var passport = require('passport');
-var crypto = require('crypto');
-var routes = require('./routes');
+const cors = require('cors');
+const path = require('path');
+const passport = require('passport');
 
-// Package documentation - https://www.npmjs.com/package/connect-mongo
-const MongoStore = require('connect-mongo');
 
 /**
  * -------------------- GENERAL SETUP ------------------------
  */
 
+
 // Gives us access to variables set in the .env file via `process.env.VARIABLE_NAME` syntax
 require('dotenv').config();
 
-// Create the Express application
-var app = express();
 
+// Create the Express application
+let app = express();
+
+
+// Configures the database and opens a global connection that can be used in any module with `mongoose.connection`
+require('./config/database');
+
+
+// Must first load the models
+require('./models/user');
+
+
+// Pass the global passport object into the configuration function
+require('./config/passport')(passport);
+
+
+// This will initialize the passport object on every request
+app.use(passport.initialize());
+
+
+// Instead of using body-parser middleware, use the new Express implementation of the same thing
 app.use(express.json());
 app.use(express.urlencoded({extended: true}));
 
-/**
- * -------------------- SESSION SETUP ------------------------
- */
+
+// Allow our Angular application to make HTTP requests to Express application
+app.use(cors());
 
 
-app.use(session({
-    secret: 'some secret',
-    resave: false,
-    saveUninitialized: true,
-    store: MongoStore.create({
-        mongoUrl: 'mongodb://localhost',
-        dbName: 'tutorial_db',
-        collection: 'sessions'
-    }),
-    cookie: {
-        maxAge: 1000 * 60 * 60 * 24 // Equals 1 day (1 day * 24 hr/1 day * 60 min/1 hr * 60 sec/1 min * 1000 ms/1 sec)
-    }
-}))
+// Where Angular builds to - In the ./angular/angular.json file, you will find this configuration
+// at the property: projects.angular.architect.build.options.outputPath
+// When you run `ng build`, the output will go to the ./public directory
+app.use(express.static(path.join(__dirname, 'public')));
 
-/**
- * -------------------- PASSPORT AUTHENTICATION --------------
- */
-// Need to require the entire Passport config module so app.js knows about it
-require('./config/passport');
-
-app.use(passport.initialize());
-app.use(passport.session());
-
-// TODO
-app.use((req, res, next) => {
-    console.log(req.session);
-    console.log(req.user);
-    next();
-});
 /**
  * -------------------- ROUTES -------------------------------
  */
-// Imports all of the routes from ./routes/index.js
-app.use(routes);
 
+// Imports all of the routes from ./routes/index.js
+app.use(require('./routes'));
 
 /**
  * -------------------- SERVER -------------------------------

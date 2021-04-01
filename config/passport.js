@@ -1,46 +1,41 @@
-const passport = require('passport');
-const LocalStrategy = require('passport-local').Strategy;
-const connection = require('./database');
-const User = connection.models.User;
-const validPassword = require('../lib/passwordUtils').validPassword;
+const JwtStrategy = require('passport-jwt').Strategy
+const ExtractJwt = require('passport-jwt').ExtractJwt;
+const fs = require('fs');
+const path = require('path');
+const User = require('mongoose').model('User');
 
-const customFields = {
-    usernameField: 'uname',
-    passwordField: 'pw'
+const pathToKey = path.join(__dirname, '..', 'id_rsa_pub.pem');
+const PUB_KEY = fs.readFileSync(pathToKey, 'utf8');
+
+// At a minimum, you must pass the `jwtFromRequest` and `secretOrKey` properties
+const options = {
+    jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+    secretOrKey: PUB_KEY,
+    algorithms: ['RS256']
 };
 
-const verifyCallback = (username, password, done) => {
+// app.js will pass the global passport object here, and this function will configure it
+module.exports = (passport) => {
+    // The JWT payload is passed into the verify callback
+    passport.use(new JwtStrategy(options, function (jwt_payload, done) {
 
-    User.findOne({ username: username })
-        .then((user) => {
-            if (!user) { return done(null, false) }
+        console.log(jwt_payload);
 
-            const isValid = validPassword(password, user.hash, user.salt);
+        // We will assign the `sub` property on the JWT to the database ID of user
+        User.findOne({_id: jwt_payload.sub}, function (err, user) {
 
-            if (isValid) {
+            // This flow look familiar?  It is the same as when we implemented
+            // the `passport-local` strategy
+            if (err) {
+                return done(err, false);
+            }
+            if (user) {
                 return done(null, user);
             } else {
                 return done(null, false);
             }
-        })
-        .catch((err) => {
-            done(err);
+
         });
 
+    }));
 }
-
-const strategy = new LocalStrategy(customFields, verifyCallback);
-
-passport.use(strategy);
-
-passport.serializeUser((user, done) => {
-    done(null, user.id);
-});
-
-passport.deserializeUser((userId, done) => {
-    User.findById(userId)
-        .then((user) => {
-            done(null, user);
-        })
-        .catch(err => done(err))
-});

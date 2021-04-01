@@ -1,2 +1,5 @@
-.env
 node_modules/
+JWT/
+cryptography/
+.env
+id_rsa_priv.pem
